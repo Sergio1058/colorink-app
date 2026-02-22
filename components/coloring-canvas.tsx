@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import Animated, {
@@ -43,6 +44,8 @@ interface Props {
   activeColor: string;
   isZenMode?: boolean;
 }
+
+
 
 // ─── Canvas Component ─────────────────────────────────────────────────────────
 
@@ -174,10 +177,24 @@ export const ColoringCanvas = forwardRef<ColoringCanvasRef, Props>(
               source={imageSource}
               style={[styles.image, { width: imageSize.width, height: imageSize.height }]}
               resizeMode="contain"
-              onLoad={(e) => {
-                const { width, height } = e.nativeEvent.source;
-                const ratio = height / width;
-                setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * ratio });
+              onLoad={() => {
+                // Use Image.getSize to get actual dimensions
+                if (typeof imageSource === 'number') {
+                  // For require() images, use a default aspect ratio
+                  setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 });
+                } else if (imageSource.uri) {
+                  Image.getSize(
+                    imageSource.uri,
+                    (width, height) => {
+                      const ratio = height / width;
+                      setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * ratio });
+                    },
+                    () => {
+                      // Fallback on error
+                      setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 });
+                    }
+                  );
+                }
                 setIsLoading(false);
               }}
             />
