@@ -1,139 +1,17 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  Modal,
-  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  runOnJS,
-} from "react-native-reanimated";
-import { GestureDetector, Gesture } from "react-native-gesture-handler";
-import { hsvToHex, ALL_PALETTES, ColorPalette, isLightColor } from "@/lib/colors";
+import { LinearGradient } from "expo-linear-gradient";
+import { ALL_PALETTES, ColorPalette } from "@/lib/colors";
 import { useColors } from "@/hooks/use-colors";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const WHEEL_SIZE = SCREEN_WIDTH * 0.72;
-const HALF = WHEEL_SIZE / 2;
-
-// ─── Rainbow Wheel ────────────────────────────────────────────────────────────
-
-interface RainbowWheelProps {
-  onColorSelect: (hex: string) => void;
-  selectedColor: string;
-}
-
-function RainbowWheel({ onColorSelect, selectedColor }: RainbowWheelProps) {
-  const [brightness, setBrightness] = useState(1);
-  const cursorX = useSharedValue(HALF);
-  const cursorY = useSharedValue(HALF);
-
-  const getColorFromPosition = useCallback(
-    (x: number, y: number) => {
-      const dx = x - HALF;
-      const dy = y - HALF;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const r = HALF;
-      if (dist > r) return null;
-
-      const angle = Math.atan2(dy, dx);
-      const h = ((angle / (2 * Math.PI)) + 1) % 1;
-      const s = Math.min(dist / r, 1);
-      return hsvToHex(h, s, brightness);
-    },
-    [brightness]
-  );
-
-  const tapGesture = Gesture.Tap().onEnd((e) => {
-    const color = getColorFromPosition(e.x, e.y);
-    if (color) {
-      cursorX.value = e.x;
-      cursorY.value = e.y;
-      runOnJS(onColorSelect)(color);
-    }
-  });
-
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      const color = getColorFromPosition(e.x, e.y);
-      if (color) {
-        cursorX.value = e.x;
-        cursorY.value = e.y;
-        runOnJS(onColorSelect)(color);
-      }
-    });
-
-  const composedGesture = Gesture.Race(tapGesture, panGesture);
-
-  const cursorStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: cursorX.value - 10 },
-      { translateY: cursorY.value - 10 },
-    ],
-  }));
-
-  // Generate the rainbow wheel using a grid of colored dots
-  const dots: { key: string; x: number; y: number; color: string }[] = [];
-  const steps = 40;
-  for (let xi = 0; xi <= steps; xi++) {
-    for (let yi = 0; yi <= steps; yi++) {
-      const x = (xi / steps) * WHEEL_SIZE;
-      const y = (yi / steps) * WHEEL_SIZE;
-      const color = getColorFromPosition(x, y);
-      if (color) {
-        dots.push({ key: `${xi}-${yi}`, x, y, color });
-      }
-    }
-  }
-
-  return (
-    <View style={styles.wheelContainer}>
-      <GestureDetector gesture={composedGesture}>
-        <View style={[styles.wheel, { width: WHEEL_SIZE, height: WHEEL_SIZE }]}>
-          {dots.map((dot) => (
-            <View
-              key={dot.key}
-              style={[
-                styles.wheelDot,
-                {
-                  left: dot.x,
-                  top: dot.y,
-                  backgroundColor: dot.color,
-                },
-              ]}
-            />
-          ))}
-          <Animated.View style={[styles.cursor, cursorStyle]} />
-        </View>
-      </GestureDetector>
-
-      {/* Brightness slider */}
-      <View style={styles.brightnessRow}>
-        <Text style={styles.brightnessLabel}>Brillo</Text>
-        <View style={styles.brightnessTrack}>
-          {Array.from({ length: 20 }, (_, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[
-                styles.brightnessStep,
-                { backgroundColor: `hsl(0,0%,${Math.round((i / 19) * 100)}%)` },
-                Math.abs(brightness - i / 19) < 0.03 && styles.brightnessStepActive,
-              ]}
-              onPress={() => setBrightness(i / 19)}
-            />
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
 
 // ─── Color Swatch ─────────────────────────────────────────────────────────────
 
@@ -162,6 +40,35 @@ function ColorSwatch({
   );
 }
 
+// ─── Gradient Spectrum ────────────────────────────────────────────────────────
+
+function GradientSpectrum({ onColorSelect }: { onColorSelect: (color: string) => void }) {
+  const colors = useColors();
+  const spectrumColors = [
+    "#FF0000", "#FF7F00", "#FFFF00", "#00FF00", "#0000FF", "#4B0082", "#9400D3",
+  ] as const;
+
+  return (
+    <View style={styles.gradientContainer}>
+      <LinearGradient
+        colors={spectrumColors as any}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.gradientBar}
+      />
+      <View style={styles.gradientSwatches}>
+        {spectrumColors.map((color: string) => (
+            <TouchableOpacity
+              key={color}
+              style={[styles.gradientSwatch, { backgroundColor: color as any }]}
+              onPress={() => onColorSelect(color)}
+            />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Color Picker ────────────────────────────────────────────────────────
 
 interface ColorPickerProps {
@@ -172,7 +79,7 @@ interface ColorPickerProps {
   onUnlockPalette: (paletteId: string) => void;
 }
 
-type Tab = "palette" | "rainbow" | "recent";
+type Tab = "palette" | "spectrum" | "recent";
 
 export function ColorPicker({
   selectedColor,
@@ -192,14 +99,14 @@ export function ColorPicker({
     <View style={[styles.container, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Tab Bar */}
       <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-        {(["palette", "rainbow", "recent"] as Tab[]).map((tab) => (
+        {(["palette", "spectrum", "recent"] as Tab[]).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && { borderBottomColor: "#FF3366", borderBottomWidth: 2 }]}
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, { color: activeTab === tab ? "#FF3366" : colors.muted }]}>
-              {tab === "palette" ? "Paleta" : tab === "rainbow" ? "Arcoíris" : "Recientes"}
+              {tab === "palette" ? "Paleta" : tab === "spectrum" ? "Espectro" : "Recientes"}
             </Text>
           </TouchableOpacity>
         ))}
@@ -253,12 +160,9 @@ export function ColorPicker({
         </>
       )}
 
-      {/* Rainbow Wheel */}
-      {activeTab === "rainbow" && (
-        <RainbowWheel
-          selectedColor={selectedColor}
-          onColorSelect={onColorSelect}
-        />
+      {/* Gradient Spectrum */}
+      {activeTab === "spectrum" && (
+        <GradientSpectrum onColorSelect={onColorSelect} />
       )}
 
       {/* Recent Colors */}
@@ -301,7 +205,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderTopWidth: 1,
     paddingBottom: 16,
-    maxHeight: 460,
+    maxHeight: 380,
   },
   tabBar: {
     flexDirection: "row",
@@ -344,6 +248,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
     justifyContent: "flex-start",
+    marginBottom: 12,
   },
   swatch: {
     borderWidth: 1,
@@ -357,62 +262,33 @@ const styles = StyleSheet.create({
   swatchWhite: {
     borderColor: "#CCCCCC",
   },
-  wheelContainer: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  wheel: {
-    borderRadius: HALF,
-    overflow: "hidden",
-    position: "relative",
-  },
-  wheelDot: {
-    position: "absolute",
-    width: WHEEL_SIZE / 40 + 2,
-    height: WHEEL_SIZE / 40 + 2,
-  },
-  cursor: {
-    position: "absolute",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
-    backgroundColor: "transparent",
-    shadowColor: "#000",
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  brightnessRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingHorizontal: 16,
+  gradientContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     gap: 10,
   },
-  brightnessLabel: {
-    fontSize: 12,
-    color: "#888",
-    width: 40,
+  gradientBar: {
+    height: 40,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  brightnessTrack: {
-    flex: 1,
+  gradientSwatches: {
     flexDirection: "row",
-    height: 24,
-    borderRadius: 12,
-    overflow: "hidden",
+    justifyContent: "space-around",
+    gap: 4,
   },
-  brightnessStep: {
-    flex: 1,
-    height: "100%",
-  },
-  brightnessStepActive: {
+  gradientSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#FF3366",
+    borderColor: "rgba(0,0,0,0.15)",
   },
   recentContainer: {
-    padding: 16,
+    padding: 12,
   },
   emptyText: {
     textAlign: "center",

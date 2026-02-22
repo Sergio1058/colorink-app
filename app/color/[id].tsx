@@ -79,76 +79,64 @@ export default function ColorScreen() {
       });
     }, 1500);
     return () => clearTimeout(timer);
-  }, [colorMap, recentColors, id]);
+  }, [id, colorMap, recentColors]);
 
   // ─── Color Zone Handler ───────────────────────────────────────────────────────
   const handleColorZone = useCallback(
     (x: number, y: number) => {
-      const key = `${Math.round(x / 8) * 8},${Math.round(y / 8) * 8}`;
+      const key = `${Math.round(x)},${Math.round(y)}`;
+      if (colorMap[key] === selectedColor) return;
+
+      setUndoStack([...undoStack, colorMap]);
+      setRedoStack([]);
+
+      const newColorMap = { ...colorMap, [key]: selectedColor };
+      setColorMap(newColorMap);
+
+      // Add to recent colors
+      if (!recentColors.includes(selectedColor)) {
+        setRecentColors([selectedColor, ...recentColors].slice(0, MAX_RECENT_COLORS));
+      }
 
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-
-      setUndoStack((prev) => {
-        const newStack = [...prev, colorMap];
-        return newStack.slice(-MAX_UNDO_STEPS);
-      });
-      setRedoStack([]);
-      setColorMap((prev) => ({ ...prev, [key]: selectedColor }));
-      setRecentColors((prev) => {
-        const filtered = prev.filter((c) => c !== selectedColor);
-        return [selectedColor, ...filtered].slice(0, MAX_RECENT_COLORS);
-      });
     },
-    [selectedColor, colorMap]
+    [colorMap, selectedColor, recentColors, undoStack]
   );
 
-  // ─── Undo / Redo ─────────────────────────────────────────────────────────────
+  // ─── Undo/Redo ────────────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    const prev = undoStack[undoStack.length - 1];
-    setRedoStack((r) => [colorMap, ...r].slice(0, MAX_UNDO_STEPS));
-    setUndoStack((u) => u.slice(0, -1));
-    setColorMap(prev);
-  }, [undoStack, colorMap]);
+    const newUndo = [...undoStack];
+    const previous = newUndo.pop()!;
+    setRedoStack([...redoStack, colorMap]);
+    setColorMap(previous);
+    setUndoStack(newUndo);
+  }, [colorMap, undoStack, redoStack]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return;
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    const next = redoStack[0];
-    setUndoStack((u) => [...u, colorMap].slice(-MAX_UNDO_STEPS));
-    setRedoStack((r) => r.slice(1));
+    const newRedo = [...redoStack];
+    const next = newRedo.pop()!;
+    setUndoStack([...undoStack, colorMap]);
     setColorMap(next);
-  }, [redoStack, colorMap]);
+    setRedoStack(newRedo);
+  }, [colorMap, undoStack, redoStack]);
 
-  // ─── Reset ────────────────────────────────────────────────────────────────────
   const handleReset = useCallback(() => {
-    Alert.alert(
-      "Borrar coloreado",
-      "¿Seguro que quieres empezar de cero? Se perderán todos los colores.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Borrar todo",
-          style: "destructive",
-          onPress: () => {
-            setUndoStack((prev) => [...prev, colorMap].slice(-MAX_UNDO_STEPS));
-            setRedoStack([]);
-            setColorMap({});
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            }
-          },
+    Alert.alert("¿Limpiar dibujo?", "Se borrará todo el progreso de coloreo.", [
+      { text: "Cancelar" },
+      {
+        text: "Limpiar",
+        onPress: () => {
+          setColorMap({});
+          setUndoStack([]);
+          setRedoStack([]);
         },
-      ]
-    );
-  }, [colorMap]);
+      },
+    ]);
+  }, []);
 
   // ─── Complete Drawing ─────────────────────────────────────────────────────────
   const handleComplete = useCallback(async () => {
@@ -196,21 +184,17 @@ export default function ColorScreen() {
   const handleUnlockPalette = useCallback(
     (paletteId: string) => {
       Alert.alert(
-        "Desbloquear Paleta",
-        "Ver un breve anuncio para desbloquear esta paleta de colores de forma permanente.",
+        "Paleta bloqueada",
+        "Mira un anuncio para desbloquear esta paleta.",
         [
-          { text: "Cancelar", style: "cancel" },
+          { text: "Cancelar" },
           {
             text: "Ver anuncio",
             onPress: () => {
-              setTimeout(() => {
-                const newPalettes = [...state.settings.unlockedPalettes, paletteId];
-                updateSettings({ unlockedPalettes: newPalettes });
-                if (Platform.OS !== "web") {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                }
-                Alert.alert("¡Paleta desbloqueada!", "Ya puedes usar esta paleta de colores.");
-              }, 500);
+              updateSettings({
+                unlockedPalettes: [...state.settings.unlockedPalettes, paletteId],
+              });
+              Alert.alert("¡Paleta desbloqueada!", `Ahora tienes acceso a la paleta "${paletteId}".`);
             },
           },
         ]
@@ -242,7 +226,7 @@ export default function ColorScreen() {
           <View
             style={[
               styles.header,
-              { paddingTop: insets.top + 8, backgroundColor: colors.surface, borderBottomColor: colors.border },
+              { paddingTop: insets.top + 10, backgroundColor: colors.surface, borderBottomColor: colors.border },
             ]}
           >
             <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
@@ -343,13 +327,15 @@ export default function ColorScreen() {
 
         {/* Color Picker Panel */}
         {showColorPicker && !isZenMode && (
-          <ColorPicker
-            selectedColor={selectedColor}
-            recentColors={recentColors}
-            unlockedPalettes={state.settings.unlockedPalettes}
-            onColorSelect={(color) => setSelectedColor(color)}
-            onUnlockPalette={handleUnlockPalette}
-          />
+          <View style={[styles.colorPickerWrapper, { borderTopColor: colors.border }]}>
+            <ColorPicker
+              selectedColor={selectedColor}
+              recentColors={recentColors}
+              unlockedPalettes={state.settings.unlockedPalettes}
+              onColorSelect={(color) => setSelectedColor(color)}
+              onUnlockPalette={handleUnlockPalette}
+            />
+          </View>
         )}
 
         {/* Interstitial Ad */}
@@ -393,42 +379,47 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255,51,102,0.08)",
   },
   headerBtnDisabled: {
     opacity: 0.4,
   },
   headerBtnText: {
-    fontSize: 18,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FF3366",
   },
   headerCenter: {
     flex: 1,
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
   },
   headerSubtitle: {
     fontSize: 11,
-    marginTop: 1,
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: "row",
-    gap: 2,
+    gap: 6,
     alignItems: "center",
   },
   completeBtn: {
-    backgroundColor: "#FF3366",
+    backgroundColor: "#22C55E",
     borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   completeBtnText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
   },
   canvasArea: {
@@ -439,21 +430,21 @@ const styles = StyleSheet.create({
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderTopWidth: 1,
-    gap: 10,
+    gap: 8,
   },
   activeColorBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: "#FF3366",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: "rgba(0,0,0,0.15)",
     shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   quickPalette: {
     flex: 1,
@@ -462,16 +453,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   quickColor: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.1)",
   },
   quickColorSelected: {
     borderWidth: 2.5,
     borderColor: "#FF3366",
-    transform: [{ scale: 1.15 }],
+    transform: [{ scale: 1.1 }],
   },
   zenBtn: {
     width: 36,
@@ -483,6 +474,10 @@ const styles = StyleSheet.create({
   },
   zenBtnText: {
     fontSize: 18,
+  },
+  colorPickerWrapper: {
+    maxHeight: "40%",
+    borderTopWidth: 1,
   },
   errorContainer: {
     flex: 1,
