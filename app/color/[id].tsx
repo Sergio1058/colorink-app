@@ -175,7 +175,7 @@ export default function ColorScreen() {
       Alert.alert(
         "¡Obra guardada! 🎉",
         "Tu obra ha sido guardada en la galería. El dibujo se ha reiniciado para que puedas colorear de nuevo.",
-        [{ text: "Ver galería", onPress: () => router.push("/gallery" as any) }, { text: "Seguir coloreando" }]
+        [{ text: "Ver galería", onPress: () => setTimeout(() => router.push("/(tabs)/gallery" as any), 100) }, { text: "Seguir coloreando" }]
       );
     }
   }, [id, drawing, colorMap, state.settings.worksCompleted, addColoredWork, updateSettings, router]);
@@ -219,8 +219,7 @@ export default function ColorScreen() {
   const colorCount = Object.keys(colorMap).length;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
         {/* Header */}
         {!isZenMode && (
           <View
@@ -343,7 +342,7 @@ export default function ColorScreen() {
           visible={showInterstitial}
           onClose={() => {
             setShowInterstitial(false);
-            router.push("/gallery" as any);
+            setTimeout(() => router.push("/(tabs)/gallery" as any), 100);
           }}
           onWatchRewarded={() => {
             setShowInterstitial(false);
@@ -358,11 +357,10 @@ export default function ColorScreen() {
               });
               Alert.alert("¡Paleta desbloqueada!", `Has desbloqueado la paleta "${toUnlock}".`);
             }
-            router.push("/gallery" as any);
+            setTimeout(() => router.push("/(tabs)/gallery" as any), 100);
           }}
         />
       </View>
-    </GestureHandlerRootView>
   );
 }
 
