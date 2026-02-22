@@ -13,6 +13,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { INK_THRESHOLD } from "@/lib/colors";
 
@@ -111,7 +112,7 @@ export const ColoringCanvas = forwardRef<ColoringCanvasRef, Props>(
         // Convert screen coordinates to image coordinates
         const imgX = (e.x - translateX.value) / scale.value;
         const imgY = (e.y - translateY.value) / scale.value;
-        onColorZone(imgX, imgY);
+        runOnJS(onColorZone)(imgX, imgY);
       });
 
     const composedGesture = Gesture.Simultaneous(

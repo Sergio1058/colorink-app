@@ -13,6 +13,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  runOnJS,
 } from "react-native-reanimated";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import { hsvToHex, ALL_PALETTES, ColorPalette, isLightColor } from "@/lib/colors";
@@ -55,7 +56,7 @@ function RainbowWheel({ onColorSelect, selectedColor }: RainbowWheelProps) {
     if (color) {
       cursorX.value = e.x;
       cursorY.value = e.y;
-      onColorSelect(color);
+      runOnJS(onColorSelect)(color);
     }
   });
 
@@ -65,7 +66,7 @@ function RainbowWheel({ onColorSelect, selectedColor }: RainbowWheelProps) {
       if (color) {
         cursorX.value = e.x;
         cursorY.value = e.y;
-        onColorSelect(color);
+        runOnJS(onColorSelect)(color);
       }
     });
 
