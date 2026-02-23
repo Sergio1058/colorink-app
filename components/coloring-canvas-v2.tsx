@@ -1,218 +1,133 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState, useEffect } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Platform,
-  StyleSheet,
-  View,
-} from "react-native";
-import { GestureDetector, Gesture } from "react-native-gesture-handler";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  runOnJS,
-} from "react-native-reanimated";
+import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import { StyleSheet, View, Dimensions } from "react-native";
+import { WebView } from "react-native-webview";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-export interface ColoringCanvasRef {
-  undo: () => void;
-  redo: () => void;
-  reset: () => void;
-  getColorMap: () => Record<string, string>;
-  canUndo: boolean;
-  canRedo: boolean;
-}
-
 interface Props {
   imageSource: { uri: string } | number;
-  colorMap: Record<string, string>;
-  onColorZone: (x: number, y: number, color: string) => void;
   activeColor: string;
-  isZenMode?: boolean;
 }
 
-/**
- * Simplified coloring canvas that stores color zones as coordinates.
- * Each tap records a zone with its color, rendered as colored circles under the image.
- */
-export const ColoringCanvasV2 = forwardRef<ColoringCanvasRef, Props>(
-  ({ imageSource, colorMap, onColorZone, activeColor, isZenMode }, ref) => {
-    const [imageSize, setImageSize] = useState({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.4 });
-    const [isLoading, setIsLoading] = useState(true);
+export const ColoringCanvasV2 = forwardRef((props: Props, ref) => {
+  const webViewRef = useRef<WebView>(null);
 
-    // Zoom & Pan state
-    const scale = useSharedValue(1);
-    const savedScale = useSharedValue(1);
-    const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
-    const savedTranslateX = useSharedValue(0);
-    const savedTranslateY = useSharedValue(0);
+  // Convertimos la imagen a una URL que el WebView entienda
+  const imageUrl = typeof props.imageSource === 'number' 
+    ? Image.resolveAssetSource(props.imageSource).uri 
+    : props.imageSource.uri;
 
-    // Pinch to zoom
-    const pinchGesture = Gesture.Pinch()
-      .onUpdate((e) => {
-        scale.value = Math.min(Math.max(savedScale.value * e.scale, 0.8), 4);
-      })
-      .onEnd(() => {
-        savedScale.value = scale.value;
-      });
+  // Este es el "motor" de Paint en JavaScript puro
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          body { margin: 0; padding: 0; overflow: hidden; background: #fff; }
+          canvas { width: 100vw; height: 100vh; object-fit: contain; }
+        </style>
+      </head>
+      <body>
+        <canvas id="paintCanvas"></canvas>
+        <script>
+          const canvas = document.getElementById('paintCanvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const img = new Image();
+          img.src = "${imageUrl}";
+          img.crossOrigin = "Anonymous";
 
-    // Pan gesture (2 fingers)
-    const panGesture = Gesture.Pan()
-      .minPointers(2)
-      .onUpdate((e) => {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
-      })
-      .onEnd(() => {
-        savedTranslateX.value = translateX.value;
-        savedTranslateY.value = translateY.value;
-      });
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+          };
 
-    // Double tap to reset zoom
-    const doubleTapGesture = Gesture.Tap()
-      .numberOfTaps(2)
-      .onEnd(() => {
-        scale.value = withTiming(1, { duration: 250 });
-        savedScale.value = 1;
-        translateX.value = withTiming(0, { duration: 250 });
-        translateY.value = withTiming(0, { duration: 250 });
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      });
+          function getPixel(imageData, x, y) {
+            const index = (y * imageData.width + x) * 4;
+            return [
+              imageData.data[index],
+              imageData.data[index + 1],
+              imageData.data[index + 2],
+              imageData.data[index + 3]
+            ];
+          }
 
-    // Single tap to color
-    const tapGesture = Gesture.Tap()
-      .numberOfTaps(1)
-      .maxDuration(250)
-      .onEnd((e) => {
-        // Convert screen coordinates to image coordinates
-        const imgX = (e.x - translateX.value) / scale.value;
-        const imgY = (e.y - translateY.value) / scale.value;
-        runOnJS(onColorZone)(imgX, imgY, activeColor);
-      });
+          function floodFill(startX, startY, fillColor) {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const width = imageData.width;
+            const height = imageData.height;
+            const targetColor = getPixel(imageData, startX, startY);
+            
+            // Si tocamos algo que ya es del color o es muy oscuro (línea negra), no hacemos nada
+            if (isBlack(targetColor) || colorsMatch(targetColor, fillColor)) return;
 
-    const composedGesture = Gesture.Simultaneous(
-      Gesture.Race(doubleTapGesture, tapGesture),
-      Gesture.Simultaneous(pinchGesture, panGesture)
-    );
+            const stack = [[startX, startY]];
+            while (stack.length > 0) {
+              const [x, y] = stack.pop();
+              const index = (y * width + x) * 4;
 
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { scale: scale.value },
-      ],
-    }));
+              if (x >= 0 && x < width && y >= 0 && y < height && 
+                  colorsMatch(getPixel(imageData, x, y), targetColor)) {
+                
+                imageData.data[index] = fillColor[0];
+                imageData.data[index + 1] = fillColor[1];
+                imageData.data[index + 2] = fillColor[2];
+                imageData.data[index + 3] = 255;
 
-    // Expose methods via ref
-    useImperativeHandle(ref, () => ({
-      undo: () => {},
-      redo: () => {},
-      reset: () => {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      },
-      getColorMap: () => colorMap,
-      canUndo: false,
-      canRedo: false,
-    }));
+                stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+              }
+            }
+            ctx.putImageData(imageData, 0, 0);
+          }
 
-    return (
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.container}>
-          <Animated.View style={[styles.canvasWrapper, animatedStyle]}>
-            {/* Color zones layer - colored circles under the drawing */}
-            <View style={[styles.image, { width: imageSize.width, height: imageSize.height }]}>
-              {Object.entries(colorMap).map(([key, color]) => {
-                const [x, y] = key.split(",").map(Number);
-                return (
-                  <View
-                    key={key}
-                    style={[
-                      styles.colorDot,
-                      {
-                        left: x - 30,
-                        top: y - 30,
-                        backgroundColor: color,
-                      },
-                    ]}
-                  />
-                );
-              })}
-            </View>
+          function isBlack(color) {
+            return color[0] < 50 && color[1] < 50 && color[2] < 50;
+          }
 
-            {/* Drawing image on top - black lines act as natural borders */}
-            <Image
-              source={imageSource}
-              style={[styles.image, { width: imageSize.width, height: imageSize.height }]}
-              resizeMode="contain"
-              onLoad={() => {
-                // Use Image.getSize to get actual dimensions
-                if (typeof imageSource === "number") {
-                  // For require() images, use a default aspect ratio
-                  setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 });
-                } else if (imageSource.uri) {
-                  Image.getSize(
-                    imageSource.uri,
-                    (width, height) => {
-                      const ratio = height / width;
-                      setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * ratio });
-                    },
-                    () => {
-                      // Fallback on error
-                      setImageSize({ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 });
-                    }
-                  );
-                }
-                setIsLoading(false);
-              }}
-            />
+          function colorsMatch(c1, c2) {
+            return Math.abs(c1[0] - c2[0]) < 20 && Math.abs(c1[1] - c2[1]) < 20 && Math.abs(c1[2] - c2[2]) < 20;
+          }
 
-            {isLoading && (
-              <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="large" color="#FF3366" />
-              </View>
-            )}
-          </Animated.View>
-        </View>
-      </GestureDetector>
-    );
-  }
-);
+          canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = Math.floor((e.clientX - rect.left) * scaleX);
+            const y = Math.floor((e.clientY - rect.top) * scaleY);
+            
+            // Color activo (convertir hex a RGB)
+            const color = hexToRgb("${props.activeColor}");
+            floodFill(x, y, color);
+          });
 
-ColoringCanvasV2.displayName = "ColoringCanvasV2";
+          function hexToRgb(hex) {
+            const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+            return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0,0,0];
+          }
+        </script>
+      </body>
+    </html>
+  `;
+
+  useImperativeHandle(ref, () => ({
+    reset: () => webViewRef.current?.reload(),
+  }));
+
+  return (
+    <View style={styles.container}>
+      <WebView
+        ref={webViewRef}
+        originWhitelist={['*']}
+        source={{ html: htmlContent }}
+        style={styles.webview}
+        scrollEnabled={false}
+      />
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    overflow: "hidden",
-    backgroundColor: "#FFF",
-  },
-  canvasWrapper: {
-    flex: 1,
-  },
-  image: {
-    position: "absolute",
-  },
- colorDot: {
-    position: "absolute",
-    width: 200, // Lo hacemos más grande
-    height: 200,
-    borderRadius: 100,
-    opacity: 1, // Que no sea transparente
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  webview: { flex: 1, width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.4 }
 });
