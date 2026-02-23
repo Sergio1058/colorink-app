@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Alert,
   Dimensions,
@@ -16,7 +16,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useAppContext } from "@/lib/app-context";
 import { deleteColoredWork } from "@/lib/store";
-import { DRAWING_ASSETS } from "@/lib/drawing-assets";
+import { DRAWING_ASSETS } from "@/lib/drawing-assets"
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_SIZE = (SCREEN_WIDTH - 48) / 2;
@@ -78,32 +78,46 @@ export default function GalleryScreen() {
         renderItem={({ item }) => {
           const asset = DRAWING_ASSETS[item.drawingId];
           return (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onLongPress={() => handleDelete(item.id, item.drawingTitle)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.cardImage}>
-                {asset ? (
-                  <Image source={asset} style={styles.image} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.imagePlaceholder, { backgroundColor: colors.border }]}>
-                    <Text style={{ fontSize: 32 }}>🖼</Text>
-                  </View>
-                )}
-              </View>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={styles.cardImageContainer}
+                activeOpacity={0.7}
+                onPress={() => {
+                  // TODO: Navigate to view completed work
+                }}
+              >
+                <View style={styles.cardImage}>
+                  {asset ? (
+                    <Image source={asset} style={styles.image} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.imagePlaceholder, { backgroundColor: colors.border }]}>
+                      <Text style={{ fontSize: 32 }}>🖼</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
               <View style={styles.cardInfo}>
-                <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>
-                  {item.drawingTitle}
-                </Text>
-                <Text style={[styles.cardDate, { color: colors.muted }]}>
-                  {new Date(item.completedAt).toLocaleDateString("es-ES", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </Text>
+                <View style={styles.cardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>
+                      {item.drawingTitle}
+                    </Text>
+                    <Text style={[styles.cardDate, { color: colors.muted }]}>
+                      {new Date(item.completedAt).toLocaleDateString("es-ES", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleDelete(item.id, item.drawingTitle)}
+                    style={[styles.deleteButton, { backgroundColor: colors.error }]}
+                  >
+                    <Text style={{ fontSize: 16 }}>🗑</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </TouchableOpacity>
+            </View>
           );
         }}
       />
@@ -142,6 +156,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
   },
+  cardImageContainer: {
+    width: "100%",
+  },
   cardImage: {
     height: CARD_SIZE,
     backgroundColor: "#FFFFFF",
@@ -159,6 +176,12 @@ const styles = StyleSheet.create({
   cardInfo: {
     padding: 10,
   },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   cardTitle: {
     fontSize: 12,
     fontWeight: "700",
@@ -166,6 +189,14 @@ const styles = StyleSheet.create({
   },
   cardDate: {
     fontSize: 11,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    opacity: 0.8,
   },
   emptyTitle: {
     fontSize: 20,

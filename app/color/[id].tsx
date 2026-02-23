@@ -14,7 +14,7 @@ import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ColoringCanvas, ColoringCanvasRef } from "@/components/coloring-canvas";
+import { ColoringCanvasV2 as ColoringCanvas, ColoringCanvasRef } from "@/components/coloring-canvas-v2";
 import { ColorPicker } from "@/components/color-picker";
 import { ZenOverlay } from "@/components/zen-overlay";
 import { InterstitialAd } from "@/components/interstitial-ad";
@@ -83,19 +83,19 @@ export default function ColorScreen() {
 
   // ─── Color Zone Handler ───────────────────────────────────────────────────────
   const handleColorZone = useCallback(
-    (x: number, y: number) => {
+    (x: number, y: number, color: string) => {
       const key = `${Math.round(x)},${Math.round(y)}`;
-      if (colorMap[key] === selectedColor) return;
+      if (colorMap[key] === color) return;
 
-      setUndoStack([...undoStack, colorMap]);
+      setUndoStack((prev) => [...prev, colorMap].slice(-MAX_UNDO_STEPS));
       setRedoStack([]);
 
-      const newColorMap = { ...colorMap, [key]: selectedColor };
+      const newColorMap = { ...colorMap, [key]: color };
       setColorMap(newColorMap);
 
       // Add to recent colors
-      if (!recentColors.includes(selectedColor)) {
-        setRecentColors([selectedColor, ...recentColors].slice(0, MAX_RECENT_COLORS));
+      if (!recentColors.includes(color)) {
+        setRecentColors((prev) => [color, ...prev].slice(0, MAX_RECENT_COLORS));
       }
 
       if (Platform.OS !== "web") {
@@ -273,14 +273,14 @@ export default function ColorScreen() {
 
         {/* Canvas */}
         <View style={styles.canvasArea}>
-          <ColoringCanvas
-            ref={canvasRef}
-            imageSource={asset}
-            colorMap={colorMap}
-            onColorZone={handleColorZone}
-            activeColor={selectedColor}
-            isZenMode={isZenMode}
-          />
+            <ColoringCanvas
+              ref={canvasRef}
+              imageSource={asset || { uri: "" }}
+              colorMap={colorMap}
+              onColorZone={handleColorZone}
+              activeColor={selectedColor}
+              isZenMode={isZenMode}
+            />
 
           {/* Zen Overlay */}
           <ZenOverlay

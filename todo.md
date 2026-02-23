@@ -13,13 +13,15 @@
 - [x] Pantalla de Ajustes
 
 ## Motor de Coloreo (Core)
-- [x] Implementar flood-fill en canvas (relleno por zonas)
+- [x] Arreglar flood-fill que no colorea
 - [x] Preservar contorno negro al colorear (threshold de línea)
 - [x] Repintado de zonas ya coloreadas
 - [x] Zoom y pan con gestos (pinch to zoom)
 - [x] Deshacer / Rehacer (hasta 20 pasos)
 - [x] Guardado automático del progreso
 - [x] Lógica de dibujos reutilizables (borrar progreso al completar)
+- [ ] Pincel libre con punta redondeada
+- [ ] Regulador de tamaño de pincel
 
 ## Selector de Color
 - [x] Paleta clásica (36 colores predefinidos por familia)
@@ -33,6 +35,9 @@
 - [x] Cambio de imagen de portada (admin)
 - [x] Dibujos de muestra incluidos en la app (estilo Murakami)
 - [x] Miniatura de progreso en tarjetas de galería
+- [x] Arreglar borrado de obras (papelera)
+- [ ] Arreglar navegación en galería de obras completadas
+- [ ] Lienzo en blanco para dibujar libremente
 
 ## Funcionalidades Extra
 - [x] Modo Zen (temporizador + pantalla limpia)
@@ -40,6 +45,7 @@
 - [x] Paletas temáticas desbloqueables
 - [ ] Compartir obra (Instagram, guardar, copiar)
 - [x] Estadísticas de uso
+- [ ] Cambiar branding de "Murakami" a "Pop"
 
 ## Publicidad / Monetización
 - [x] Banner Ad en Home/Galería
