@@ -202,12 +202,12 @@ const styles = StyleSheet.create({
   image: {
     position: "absolute",
   },
-  colorDot: {
+ colorDot: {
     position: "absolute",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    opacity: 0.7,
+    width: 200, // Lo hacemos más grande
+    height: 200,
+    borderRadius: 100,
+    opacity: 1, // Que no sea transparente
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
